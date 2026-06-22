@@ -1,0 +1,38 @@
+library(ggplot2)
+
+path <- "/home/kubuntu/Histogramas_TFG/Tandem_repeats_Moringa_Histograma_onlyPT.csv"
+datos <- read.table(path, header = FALSE, sep = ";")
+
+datos_plot <- data.frame(
+  Size = datos$V3,
+  Copy_Number = datos$V4,
+  Organelle_ID = datos$V16
+)
+
+datos_plot <- subset(datos_plot, Organelle_ID %in% c("MST_PLTD", "MOL_PLTD"))
+datos_plot$Organelle_ID <- factor(datos_plot$Organelle_ID, levels = c("MST_PLTD", "MOL_PLTD"))
+colores <- c("MST_PLTD" = "#b3e0a6", "MOL_PLTD" = "#E2B5D5")
+limite_x <- max(datos_plot$Size, na.rm = TRUE) + 10
+
+p <- ggplot(datos_plot, aes(x = Size, fill = Organelle_ID)) +
+  geom_histogram(aes(weight = Copy_Number), binwidth = 10, boundary = 0,
+                 color = "black", linewidth = 0.4, alpha = 0.9) +
+  scale_fill_manual(values = colores) +
+  facet_wrap(~ Organelle_ID, ncol = 1, scales = "free_y") +
+  labs(
+    title = "Size Distribution of Tandem Repeats",
+    x = "Period Size Thresholds (bp)",
+    y = "Total Copy Number"
+  ) +
+  scale_x_continuous(breaks = seq(0, limite_x, by = 10)) +
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    strip.text = element_text(face = "bold", size = 13),
+    axis.text.x = element_text(size = 11),
+    axis.text.y = element_text(size = 11),
+    panel.grid.minor = element_blank()
+  )
+
+print(p)
+ggsave("Histograma_TRF_Arreglado.png", plot = p, width = 10, height = 6, dpi = 300)
