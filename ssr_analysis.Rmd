@@ -1,0 +1,165 @@
+---
+title: "SSR Analysis"
+author: "Carmen"
+date: "2025-09-12"
+output: html_document
+---
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(readr)
+library(stringr)
+library(plotly)  
+
+
+leer_misa_gff <- function(file){
+  df <- read.table(file, sep="\t", header=FALSE, comment.char="#", stringsAsFactors=FALSE)
+  colnames(df) <- c("seqid","source","type","start","end","score","strand","phase","attributes")
+  return(df)
+}
+
+leer_coords <- function(file){
+  df <- read.csv(file, sep=";", header=FALSE, stringsAsFactors=FALSE)
+  colnames(df) <- c("region","start","end")
+  return(df)
+}
+
+obtener_longitud <- function(file){
+  linea <- readLines(file) %>% grep("##sequence-region", ., value=TRUE)
+  genome_length <- as.numeric(strsplit(linea, " ")[[1]][4])
+  return(genome_length)
+}
+
+asignar_region <- function(ssr_df, coords_df, genome_length){
+  ssr_df$region <- NA
+  for(i in 1:nrow(coords_df)){
+    reg <- coords_df$region[i]
+    s <- coords_df$start[i]
+    e <- coords_df$end[i]
+    
+    if(s <= e){
+      ssr_df$region[ssr_df$start >= s & ssr_df$end <= e] <- reg
+    } else {
+      cond1 <- (ssr_df$start >= s & ssr_df$start <= genome_length)
+      cond2 <- (ssr_df$start >= 1 & ssr_df$end <= e)
+      ssr_df$region[cond1 | cond2] <- reg
+    }
+  }
+  return(ssr_df)
+}
+
+procesar_especie <- function(gff_file, coord_file, especie_name, outdir){
+  ssr <- leer_misa_gff(gff_file)
+  coords <- leer_coords(coord_file)
+  genome_length <- obtener_longitud(gff_file)
+  
+  ssr_reg <- asignar_region(ssr, coords, genome_length)
+  
+  resumen <- ssr_reg %>%
+    filter(!is.na(region)) %>%
+    group_by(region) %>%
+    summarise(freq = n()) %>%
+    ungroup()
+  
+  orden <- c("LSC", "SSC", "repeat_regiona", "repeat_regionb")
+  resumen$region <- factor(resumen$region, levels=orden)
+  resumen$especie <- especie_name
+  
+  p <- ggplot(resumen, aes(x=region, y=freq, fill=region)) +
+    geom_bar(stat="identity", color="black") +
+    labs(title=paste("Frecuencia de SSRs en", especie_name),
+         x="Región canónica", y="Frecuencia de SSR") +
+    theme_minimal() +
+    theme(legend.position="none")
+  
+  ggsave(filename=file.path(outdir, paste0("histograma_", especie_name, ".png")),
+         plot=p, width=6, height=4, dpi=300)
+  
+  return(list(ssr=ssr_reg, resumen=resumen))
+}
+
+
+gff_path <- "~/Escritorio/SSR_analysis/misa/"
+coord_path <- "~/Escritorio/SSR_analysis/coord/"
+outdir <- "~/Escritorio/SSR_analysis/plots/"
+
+if(!dir.exists(outdir)) dir.create(outdir)
+
+pares <- list(
+  list(gff=paste0(gff_path, "AP000423.1.gff"), coord=paste0(coord_path, "coord_AP000423.csv"), especie="AP000423"),
+  list(gff=paste0(gff_path, "Moringa_oleifera_MK713965.1.gff"), coord=paste0(coord_path, "coord_MK713965.csv"), especie="MK713965"),
+  list(gff=paste0(gff_path, "Moringa_oleifera_MK726020.1.gff"), coord=paste0(coord_path, "coord_MK726020.csv"), especie="MK726020"),
+  list(gff=paste0(gff_path, "Moringa_stenopetala_Ethiopia.gff"), coord=paste0(coord_path, "coord_ethiopia.csv"), especie="ethiopia"),
+  list(gff=paste0(gff_path, "Moringa_stenopetala_Kenya.gff"), coord=paste0(coord_path, "coord_kenya.csv"), especie="kenya"),
+  list(gff=paste0(gff_path, "PX108826.1.gff"), coord=paste0(coord_path, "coord_PX108826.csv"), especie="PX108826")
+)
+
+
+resultados <- lapply(pares, function(x) {
+  procesar_especie(x$gff, x$coord, x$especie, outdir)
+})
+
+
+```
+
+```{r}
+
+library(dplyr)
+library(plotly)
+
+todos_resumenes <- lapply(resultados, function(x) x$resumen)
+nombres_especies <- sapply(pares, function(x) x$especie)
+
+df_plot <- do.call(rbind, Map(function(res, esp) {
+  res$especie <- esp
+  return(res)
+}, todos_resumenes, nombres_especies))
+
+orden_regiones <- c("LSC", "IRa", "SSC", "IRb")
+
+map_region <- c(
+  "LSC" = "LSC",
+  "repeat_regiona" = "IRa",
+  "SSC" = "SSC",
+  "repeat_regionb" = "IRb"
+)
+
+df_plot$region <- map_region[df_plot$region] 
+
+map_especies <- c(
+  "kenya" = "M_stenopetala_K",
+  "ethiopia" = "M_stenopetala_E",
+  "MK726020" = "M_oleifera_s",
+  "MK713965" = "M_oleifera_l",
+  "PX108826" = "C_papaya",
+  "AP000423" = "A_thaliana"
+)
+
+df_plot$especie <- map_especies[df_plot$especie] 
+
+df_plot$region <- factor(df_plot$region, levels = orden_regiones)
+
+fig <- plot_ly(
+  df_plot,
+  x = ~region,
+  y = ~especie,
+  z = ~freq,
+  color = ~region,
+  type = "scatter3d",
+  mode = "markers",
+  marker = list(size = 6, opacity = 0.8)
+) %>%
+  layout(
+    scene = list(
+      xaxis = list(title = ""), 
+      yaxis = list(title = "", standoff = 40),  
+      zaxis = list(title = "Frequency SSR")  
+    ),
+    title = "Frecuencia de SSRs en regiones y especies (3D)"
+  )
+
+fig
+
+
+```
