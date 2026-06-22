@@ -1,14 +1,9 @@
 import re
 from openpyxl import Workbook
 
-# =========================
-# CONFIGURACIÓN
-# =========================
-
-gff_file = "archivo.gff3"      # <-- Cambia por tu archivo
+gff_file = "archivo.gff3"      
 output_file = "genes_output.xls"
 
-# Lista de genes (se eliminan duplicados automáticamente)
 gene_list_raw = """
 ycf2
 TrnM-CAU
@@ -32,12 +27,7 @@ trnA-UGC
 TrnE-UUC
 """
 
-# Normalizar lista (eliminar duplicados y espacios)
 gene_set = set(g.strip().replace(",", "") for g in gene_list_raw.splitlines() if g.strip())
-
-# =========================
-# PROCESAMIENTO GFF
-# =========================
 
 results = []
 
@@ -52,7 +42,6 @@ with open(gff_file, "r") as f:
 
         feature_type = cols[2]
 
-        # Solo mirar mRNA (ahí está el Name real del gen)
         if feature_type == "mRNA":
             attributes = cols[8]
 
@@ -69,18 +58,15 @@ with open(gff_file, "r") as f:
                         cols[6]    # Strand
                     ])
 
-# =========================
-# EXPORTAR A XLS
-# =========================
 
 wb = Workbook()
 ws = wb.active
 ws.title = "Gene Coordinates"
 
-# Cabecera
+
 ws.append(["Gene", "Contig", "Start", "End", "Strand"])
 
-# Datos
+
 for row in results:
     ws.append(row)
 
