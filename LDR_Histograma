@@ -1,0 +1,40 @@
+library(ggplot2)
+
+datos <- read.table("Histograma_dispersas_NOIR.txt", header = FALSE)
+
+datos_plot <- data.frame(
+  Type_Letter = datos$V3,
+  Organelle_ID = datos$V8
+)
+datos_plot <- subset(datos_plot, Organelle_ID %in% c("MST_PLTD", "MOL_PLTD"))
+
+# Recodificar tipos de repetición y calcular frecuencias
+datos_plot$Repeat_Type <- ifelse(datos_plot$Type_Letter == "D", "Direct", "Palindromic")
+
+conteo <- as.data.frame(table(datos_plot$Organelle_ID, datos_plot$Repeat_Type))
+colnames(conteo) <- c("Organelle_ID", "Repeat_Type", "Count")
+conteo$Organelle_ID <- factor(conteo$Organelle_ID, levels = c("MST_PLTD", "MOL_PLTD"))
+
+colores <- c("MST_PLTD" = "#b3e0a6", "MOL_PLTD" = "#B9DDF1")
+
+p <- ggplot(conteo, aes(x = Repeat_Type, y = Count, fill = Organelle_ID)) +
+  geom_bar(stat = "identity", color = "black", width = 0.35, alpha = 0.9) +
+  geom_text(aes(label = Count), vjust = -0.5, size = 5, fontface = "bold") +
+  scale_fill_manual(values = colores) +
+  facet_wrap(~ Organelle_ID, nrow = 1) +
+  labs(
+    title = "Number of Long Repeats by Type in Plastid Genomes",
+    x = "Repeat Type",
+    y = "Number of Repeats"
+  ) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.15))) +
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    strip.text = element_text(face = "bold", size = 13),
+    axis.text.x = element_text(size = 12, face = "bold"),
+    panel.grid.major.x = element_blank()
+  )
+
+print(p)
+ggsave("Histograma_LongRepeats_PLTD.png", plot = p, width = 8, height = 6, dpi = 300)
